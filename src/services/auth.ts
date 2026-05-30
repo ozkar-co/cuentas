@@ -25,10 +25,15 @@ const exchangeFirebaseToken = async (firebaseUser: User): Promise<void> => {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ id_token: idToken }),
   });
-  if (!response.ok) throw new Error('Error al autenticar con el servidor');
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.message || 'Error al autenticar con el servidor');
+  }
   const json = await response.json();
-  setToken(json.data.token);
-  setStoredUser(json.data.user);
+  const payload = json.data ?? json;
+  if (!payload?.token) throw new Error('Respuesta inesperada del servidor de autenticación');
+  setToken(payload.token);
+  setStoredUser(payload.user);
 };
 
 export const signInWithGoogle = async () => {
