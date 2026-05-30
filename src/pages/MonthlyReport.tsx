@@ -14,7 +14,7 @@ import {
   IconButton,
   Button
 } from '@mui/material';
-import { Edit as EditIcon, Delete as DeleteIcon, FileDownload as FileDownloadIcon } from '@mui/icons-material';
+import { Delete as DeleteIcon, FileDownload as FileDownloadIcon } from '@mui/icons-material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
@@ -22,18 +22,16 @@ import { es } from 'date-fns/locale';
 import { format } from 'date-fns';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth } from '../services/auth';
-import { getTransactionsByMonth, updateTransaction, deleteTransaction } from '../services/transactions';
+import { getTransactionsByMonth, deleteTransaction } from '../services/transactions';
 import { getCategories } from '../services/categories';
 import type { Transaction } from '../services/transactions';
 import type { Category } from '../services/categories';
-import TransactionEditModal from '../components/TransactionEditModal';
 
 const MonthlyReport: React.FC = () => {
   const [user] = useAuthState(auth);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [summary, setSummary] = useState({
     totalIncome: 0,
     totalExpenses: 0,
@@ -42,13 +40,11 @@ const MonthlyReport: React.FC = () => {
 
   useEffect(() => {
     const loadCategories = async () => {
-      if (user) {
-        try {
-          const userCategories = await getCategories(user);
-          setCategories(userCategories);
-        } catch (error) {
-          console.error('Error al cargar categorías:', error);
-        }
+      try {
+        const userCategories = await getCategories();
+        setCategories(userCategories);
+      } catch (error) {
+        console.error('Error al cargar categorías:', error);
       }
     };
     loadCategories();
@@ -57,15 +53,17 @@ const MonthlyReport: React.FC = () => {
   const loadTransactions = async () => {
     if (user) {
       try {
-        const monthlyTransactions = await getTransactionsByMonth(user, selectedDate);
+        const year = selectedDate.getFullYear();
+        const month = selectedDate.getMonth() + 1;
+        const monthlyTransactions = await getTransactionsByMonth(year, month);
         setTransactions(monthlyTransactions);
-        
+
         const totals = monthlyTransactions.reduce(
           (acc, transaction) => {
-            if (transaction.amount > 0) {
+            if (transaction.type === 'income') {
               acc.totalIncome += transaction.amount;
             } else {
-              acc.totalExpenses += Math.abs(transaction.amount);
+              acc.totalExpenses += transaction.amount;
             }
             return acc;
           },
@@ -86,10 +84,6 @@ const MonthlyReport: React.FC = () => {
     loadTransactions();
   }, [user, selectedDate]);
 
-  const handleEdit = (transaction: Transaction) => {
-    setEditingTransaction(transaction);
-  };
-
   const handleDelete = async (transactionId: string) => {
     if (window.confirm('¿Estás seguro de que deseas eliminar esta transacción?')) {
       try {
@@ -101,20 +95,10 @@ const MonthlyReport: React.FC = () => {
     }
   };
 
-  const handleSaveEdit = async (updatedTransaction: Transaction) => {
-    try {
-      if (updatedTransaction.id) {
-        await updateTransaction(updatedTransaction.id, updatedTransaction);
-        await loadTransactions();
-      }
-    } catch (error) {
-      console.error('Error al actualizar transacción:', error);
-    }
-  };
-
-  const getCategoryName = (categoryId: string) => {
-    const category = categories.find(cat => cat.id === categoryId);
-    return category?.name || categoryId;
+  const getCategoryName = (transaction: Transaction) => {
+    return transaction.category_name ||
+      categories.find(cat => cat.id === transaction.category_id)?.name ||
+      'Sin categoría';
   };
 
   const formatAmount = (amount: number) => {
@@ -131,8 +115,8 @@ const MonthlyReport: React.FC = () => {
     const csvData = transactions.map(transaction => [
       format(transaction.date, 'dd/MM/yyyy'),
       transaction.description,
-      getCategoryName(transaction.category),
-      transaction.amount.toString()
+      getCategoryName(transaction),
+      transaction.type === 'income' ? transaction.amount.toString() : (-transaction.amount).toString()
     ]);
 
     const csvContent = [
@@ -240,20 +224,20 @@ const MonthlyReport: React.FC = () => {
                 <TableRow key={transaction.id}>
                   <TableCell>{format(transaction.date, 'dd/MM/yyyy')}</TableCell>
                   <TableCell>{transaction.description}</TableCell>
-                  <TableCell>
+                  <TableCell>{
                     <Chip
-                      label={getCategoryName(transaction.category)}
-                      color={transaction.amount >= 0 ? 'success' : 'error'}
+                      label={getCategoryName(transaction)}
+                      color={transaction.type === 'income' ? 'success' : 'error'}
                       size="small"
                     />
-                  </TableCell>
+                  }</TableCell>
                   <TableCell
                     align="right"
                     sx={{
-                      color: transaction.amount >= 0 ? 'success.main' : 'error.main',
+                      color: transaction.type === 'income' ? 'success.main' : 'error.main',
                     }}
                   >
-                    {formatAmount(transaction.amount)}
+                    {transaction.type === 'income' ? '+' : '-'}{formatAmount(transaction.amount)}
                   </TableCell>
                   <TableCell 
                     align="center"
@@ -261,13 +245,7 @@ const MonthlyReport: React.FC = () => {
                   >
                     <IconButton
                       size="small"
-                      onClick={() => handleEdit(transaction)}
-                    >
-                      <EditIcon />
-                    </IconButton>
-                    <IconButton
-                      size="small"
-                      onClick={() => handleDelete(transaction.id!)}
+                      onClick={() => handleDelete(transaction.id)}
                     >
                       <DeleteIcon />
                     </IconButton>
@@ -278,15 +256,6 @@ const MonthlyReport: React.FC = () => {
           </Table>
         </TableContainer>
 
-        {editingTransaction && (
-          <TransactionEditModal
-            open={Boolean(editingTransaction)}
-            onClose={() => setEditingTransaction(null)}
-            transaction={editingTransaction}
-            categories={categories}
-            onSave={handleSaveEdit}
-          />
-        )}
       </Box>
     </Container>
   );

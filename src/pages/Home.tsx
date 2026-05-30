@@ -5,9 +5,9 @@ import { auth } from '../services/auth';
 import AuthModal from '../components/AuthModal';
 import TransactionForm from '../components/TransactionForm';
 import { getCategories } from '../services/categories';
-import { addTransaction } from '../services/transactions';
+import { addTransaction, parseTransaction } from '../services/transactions';
 import type { Category } from '../services/categories';
-import type { Transaction } from '../services/transactions';
+import type { ParsedTransaction } from '../services/transactions';
 
 const Home: React.FC = () => {
   const [user, loading] = useAuthState(auth);
@@ -24,7 +24,7 @@ const Home: React.FC = () => {
     const loadCategories = async () => {
       if (user) {
         try {
-          const userCategories = await getCategories(user);
+          const userCategories = await getCategories();
           setCategories(userCategories);
         } catch (error) {
           console.error('Error al cargar categorías:', error);
@@ -35,16 +35,16 @@ const Home: React.FC = () => {
     loadCategories();
   }, [user]);
 
-  const handleTransactionSubmit = async (transactionData: Omit<Transaction, 'id' | 'userId'>) => {
-    if (user) {
-      try {
-        await addTransaction({
-          ...transactionData,
-          userId: user.uid,
-        });
-      } catch (error) {
-        console.error('Error al guardar la transacción:', error);
-      }
+  const handleParse = async (text: string): Promise<ParsedTransaction> => {
+    return parseTransaction(text);
+  };
+
+  const handleTransactionSubmit = async (transaction: ParsedTransaction & { date?: Date; raw_text?: string }) => {
+    try {
+      await addTransaction(transaction);
+    } catch (error) {
+      console.error('Error al guardar la transacción:', error);
+      throw error;
     }
   };
 
@@ -57,6 +57,7 @@ const Home: React.FC = () => {
       <Box sx={{ py: 4 }}>
         <TransactionForm
           categories={categories}
+          onParse={handleParse}
           onSubmit={handleTransactionSubmit}
         />
         <AuthModal
@@ -68,4 +69,4 @@ const Home: React.FC = () => {
   );
 };
 
-export default Home; 
+export default Home;

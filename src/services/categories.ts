@@ -1,68 +1,47 @@
-import {
-  collection,
-  addDoc,
-  query,
-  where,
-  getDocs,
-  deleteDoc,
-  doc,
-  updateDoc
-} from 'firebase/firestore';
-import { db } from './firebase';
-import { User } from 'firebase/auth';
+import { api } from './api';
 
 export interface Category {
-  id?: string;
-  userId: string;
+  id: string;
   name: string;
   type: 'expense' | 'income';
   color?: string;
-  icon?: string;
+  is_default: boolean;
 }
 
-export const addCategory = async (category: Omit<Category, 'id'>) => {
-  try {
-    const docRef = await addDoc(collection(db, 'categories'), category);
-    return docRef.id;
-  } catch (error) {
-    console.error('Error al añadir categoría:', error);
-    throw error;
-  }
+interface ApiCategory {
+  _id: string;
+  name: string;
+  type: 'expense' | 'income';
+  color?: string;
+  is_default: boolean;
+}
+
+const mapCategory = (c: ApiCategory): Category => ({
+  id: c._id,
+  name: c.name,
+  type: c.type,
+  color: c.color,
+  is_default: c.is_default,
+});
+
+export const getCategories = async (): Promise<Category[]> => {
+  const data = await api.get<ApiCategory[]>('/cuentas/categories');
+  return data.map(mapCategory);
 };
 
-export const getCategories = async (user: User) => {
-  try {
-    const q = query(
-      collection(db, 'categories'),
-      where('userId', '==', user.uid)
-    );
-
-    const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    })) as Category[];
-  } catch (error) {
-    console.error('Error al obtener categorías:', error);
-    throw error;
-  }
+export const addCategory = async (category: Pick<Category, 'name' | 'type' | 'color'>): Promise<Category> => {
+  const data = await api.post<ApiCategory>('/cuentas/categories', category);
+  return mapCategory(data);
 };
 
-export const updateCategory = async (categoryId: string, updates: Partial<Category>) => {
-  try {
-    const categoryRef = doc(db, 'categories', categoryId);
-    await updateDoc(categoryRef, updates);
-  } catch (error) {
-    console.error('Error al actualizar categoría:', error);
-    throw error;
-  }
+export const updateCategory = async (
+  categoryId: string,
+  updates: Partial<Pick<Category, 'name' | 'type' | 'color'>>
+): Promise<Category> => {
+  const data = await api.put<ApiCategory>(`/cuentas/categories/${categoryId}`, updates);
+  return mapCategory(data);
 };
 
-export const deleteCategory = async (categoryId: string) => {
-  try {
-    await deleteDoc(doc(db, 'categories', categoryId));
-  } catch (error) {
-    console.error('Error al eliminar categoría:', error);
-    throw error;
-  }
-}; 
+export const deleteCategory = async (categoryId: string): Promise<void> => {
+  await api.delete(`/cuentas/categories/${categoryId}`);
+};

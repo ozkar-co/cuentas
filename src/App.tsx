@@ -19,6 +19,7 @@ import {
 } from '@mui/icons-material';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, signOut } from './services/auth';
+import { getStoredUser } from './services/api';
 import Home from './pages/Home';
 import MonthlyReport from './pages/MonthlyReport';
 import Analytics from './pages/Analytics';
@@ -371,9 +372,9 @@ const App: React.FC = () => {
                   }
                 }}
               >
-                {user?.displayName && (
+                {(user?.displayName || getStoredUser()?.name) && (
                   <MenuItem disabled>
-                    Sesión iniciada como {user.displayName}
+                    Sesión iniciada como {getStoredUser()?.name || user?.displayName}
                   </MenuItem>
                 )}
                 <MenuItem onClick={handleLogout}>

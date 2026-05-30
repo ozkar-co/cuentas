@@ -25,8 +25,6 @@ import {
   FormControlLabel
 } from '@mui/material';
 import { Delete as DeleteIcon, Edit as EditIcon } from '@mui/icons-material';
-import { useAuthState } from 'react-firebase-hooks/auth';
-import { auth } from '../services/auth';
 import {
   getCategories,
   addCategory,
@@ -58,7 +56,6 @@ const INCOME_COLORS = [
 ];
 
 const Categories: React.FC = () => {
-  const [user] = useAuthState(auth);
   const [categories, setCategories] = useState<Category[]>([]);
   const [openDialog, setOpenDialog] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
@@ -71,16 +68,14 @@ const Categories: React.FC = () => {
 
   useEffect(() => {
     loadCategories();
-  }, [user]);
+  }, []);
 
   const loadCategories = async () => {
-    if (user) {
-      try {
-        const userCategories = await getCategories(user);
-        setCategories(userCategories);
-      } catch (error) {
-        console.error('Error al cargar categorías:', error);
-      }
+    try {
+      const userCategories = await getCategories();
+      setCategories(userCategories);
+    } catch (error) {
+      console.error('Error al cargar categorías:', error);
     }
   };
 
@@ -118,19 +113,11 @@ const Categories: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
-
     try {
       if (editingCategory) {
-        await updateCategory(editingCategory.id!, {
-          ...formData,
-          userId: user.uid
-        });
+        await updateCategory(editingCategory.id, formData);
       } else {
-        await addCategory({
-          ...formData,
-          userId: user.uid
-        });
+        await addCategory(formData);
       }
       await loadCategories();
       handleCloseDialog();
@@ -139,10 +126,11 @@ const Categories: React.FC = () => {
     }
   };
 
-  const handleDelete = async (categoryId: string) => {
+  const handleDelete = async (category: Category) => {
+    if (category.is_default) return;
     if (window.confirm('¿Estás seguro de que deseas eliminar esta categoría?')) {
       try {
-        await deleteCategory(categoryId);
+        await deleteCategory(category.id);
         await loadCategories();
       } catch (error) {
         console.error('Error al eliminar categoría:', error);
@@ -202,23 +190,25 @@ const Categories: React.FC = () => {
                         />
                       }
                     />
-                    <ListItemSecondaryAction>
-                      <IconButton
-                        edge="end"
-                        aria-label="edit"
-                        onClick={() => handleOpenDialog(category)}
-                        sx={{ mr: 1 }}
-                      >
-                        <EditIcon />
-                      </IconButton>
-                      <IconButton
-                        edge="end"
-                        aria-label="delete"
-                        onClick={() => handleDelete(category.id!)}
-                      >
-                        <DeleteIcon />
-                      </IconButton>
-                    </ListItemSecondaryAction>
+                    {!category.is_default && (
+                      <ListItemSecondaryAction>
+                        <IconButton
+                          edge="end"
+                          aria-label="edit"
+                          onClick={() => handleOpenDialog(category)}
+                          sx={{ mr: 1 }}
+                        >
+                          <EditIcon />
+                        </IconButton>
+                        <IconButton
+                          edge="end"
+                          aria-label="delete"
+                          onClick={() => handleDelete(category)}
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </ListItemSecondaryAction>
+                    )}
                   </ListItem>
                 ))}
               </List>
@@ -250,23 +240,25 @@ const Categories: React.FC = () => {
                         />
                       }
                     />
-                    <ListItemSecondaryAction>
-                      <IconButton
-                        edge="end"
-                        aria-label="edit"
-                        onClick={() => handleOpenDialog(category)}
-                        sx={{ mr: 1 }}
-                      >
-                        <EditIcon />
-                      </IconButton>
-                      <IconButton
-                        edge="end"
-                        aria-label="delete"
-                        onClick={() => handleDelete(category.id!)}
-                      >
-                        <DeleteIcon />
-                      </IconButton>
-                    </ListItemSecondaryAction>
+                    {!category.is_default && (
+                      <ListItemSecondaryAction>
+                        <IconButton
+                          edge="end"
+                          aria-label="edit"
+                          onClick={() => handleOpenDialog(category)}
+                          sx={{ mr: 1 }}
+                        >
+                          <EditIcon />
+                        </IconButton>
+                        <IconButton
+                          edge="end"
+                          aria-label="delete"
+                          onClick={() => handleDelete(category)}
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </ListItemSecondaryAction>
+                    )}
                   </ListItem>
                 ))}
               </List>

@@ -1,37 +1,59 @@
-import { 
-  getAuth, 
-  GoogleAuthProvider, 
+import {
+  getAuth,
+  GoogleAuthProvider,
   signInWithPopup,
   signOut as firebaseSignOut,
   onAuthStateChanged,
   User
 } from 'firebase/auth';
 import { app } from './firebase';
+import {
+  setToken,
+  clearToken,
+  getToken,
+  setStoredUser,
+  clearStoredUser,
+} from './api';
 
 const auth = getAuth(app);
 const googleProvider = new GoogleAuthProvider();
 
+const exchangeFirebaseToken = async (firebaseUser: User): Promise<void> => {
+  const idToken = await firebaseUser.getIdToken();
+  const response = await fetch('https://forja-api.onrender.com/cuentas/auth/firebase', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id_token: idToken }),
+  });
+  if (!response.ok) throw new Error('Error al autenticar con el servidor');
+  const json = await response.json();
+  setToken(json.data.token);
+  setStoredUser(json.data.user);
+};
+
 export const signInWithGoogle = async () => {
-  try {
-    const result = await signInWithPopup(auth, googleProvider);
-    return result.user;
-  } catch (error) {
-    console.error('Error durante la autenticación:', error);
-    throw error;
-  }
+  const result = await signInWithPopup(auth, googleProvider);
+  await exchangeFirebaseToken(result.user);
+  return result.user;
 };
 
 export const signOut = async () => {
-  try {
-    await firebaseSignOut(auth);
-  } catch (error) {
-    console.error('Error al cerrar sesión:', error);
-    throw error;
-  }
+  await firebaseSignOut(auth);
+  clearToken();
+  clearStoredUser();
 };
 
 export const onAuthChange = (callback: (user: User | null) => void) => {
-  return onAuthStateChanged(auth, callback);
+  return onAuthStateChanged(auth, async (user) => {
+    if (user && !getToken()) {
+      try {
+        await exchangeFirebaseToken(user);
+      } catch (e) {
+        console.error('Error al renovar token del backend:', e);
+      }
+    }
+    callback(user);
+  });
 };
 
-export { auth }; 
+export { auth };

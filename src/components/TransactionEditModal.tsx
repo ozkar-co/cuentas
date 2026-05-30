@@ -61,7 +61,7 @@ const TransactionEditModal: React.FC<TransactionEditModalProps> = ({
   const handleSelectChange = (event: SelectChangeEvent) => {
     setFormData((prev) => ({
       ...prev,
-      category: event.target.value
+      category_id: event.target.value
     }));
   };
 
@@ -85,7 +85,7 @@ const TransactionEditModal: React.FC<TransactionEditModalProps> = ({
   };
 
   const filteredCategories = categories.filter(
-    category => (formData.amount >= 0 ? category.type === 'income' : category.type === 'expense')
+    category => (formData.type === 'income' ? category.type === 'income' : category.type === 'expense')
   );
 
   return (
@@ -119,7 +119,7 @@ const TransactionEditModal: React.FC<TransactionEditModalProps> = ({
             <FormControl fullWidth required>
               <InputLabel>Categoría</InputLabel>
               <Select
-                value={formData.category}
+                value={formData.category_id || ''}
                 onChange={handleSelectChange}
                 label="Categoría"
               >

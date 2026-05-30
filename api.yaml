@@ -1,0 +1,375 @@
+# ============================================================
+# Cuentas — API Documentation
+# ============================================================
+# Prefix: /cuentas
+# Auth: JWT Bearer token (obtenido via /cuentas/auth/google)
+# Base URL: https://forja-api.onrender.com
+# ============================================================
+
+# ---- Autenticación -----------------------------------------
+
+cuentas_auth_firebase:
+  description: >
+    Valida un Firebase ID Token (emitido por Firebase Auth con Google Sign-In)
+    y devuelve un JWT de Forja API. Si el usuario no existe, lo crea y siembra
+    las categorías predeterminadas.
+  endpoint: /cuentas/auth/firebase
+  method: POST
+  authentication: none
+  request_body:
+    id_token: "string (required) — Firebase ID Token obtenido con firebase.auth().currentUser.getIdToken()"
+  response_example:
+    status: 200
+    data:
+      token: "eyJhbGci..."
+      user:
+        name: "María García"
+        email: "maria@gmail.com"
+        picture: "https://lh3.googleusercontent.com/..."
+  curl: |
+    curl -X POST https://forja-api.onrender.com/cuentas/auth/firebase \
+      -H "Content-Type: application/json" \
+      -d '{"id_token": "FIREBASE_ID_TOKEN"}'
+
+# ---- Categorías --------------------------------------------
+
+cuentas_categories_list:
+  description: >
+    Lista todas las categorías disponibles para el usuario autenticado:
+    las categorías predeterminadas del sistema más las categorías personalizadas del usuario.
+  endpoint: /cuentas/categories
+  method: GET
+  authentication: jwt
+  response_example:
+    status: 200
+    data:
+      - _id: "507f1f77bcf86cd799439011"
+        name: "Alimentación"
+        type: "expense"
+        color: "#FF6B6B"
+        is_default: true
+        user_id: null
+      - _id: "507f1f77bcf86cd799439012"
+        name: "Mi categoría custom"
+        type: "expense"
+        color: "#AABBCC"
+        is_default: false
+        user_id: "1234567890"
+  curl: |
+    curl -X GET https://forja-api.onrender.com/cuentas/categories \
+      -H "Authorization: Bearer YOUR_TOKEN"
+
+cuentas_categories_create:
+  description: Crea una categoría personalizada para el usuario autenticado.
+  endpoint: /cuentas/categories
+  method: POST
+  authentication: jwt
+  request_body:
+    name: "string (required) — Nombre de la categoría"
+    type: "string (required) — 'income' o 'expense'"
+    color: "string (optional) — Color hexadecimal, e.g. '#FF6B6B'"
+  response_example:
+    status: 201
+    data:
+      _id: "507f1f77bcf86cd799439013"
+      name: "Mascotas"
+      type: "expense"
+      color: "#FF6B6B"
+      is_default: false
+      user_id: "1234567890"
+      created_at: "2026-05-30T10:00:00Z"
+  curl: |
+    curl -X POST https://forja-api.onrender.com/cuentas/categories \
+      -H "Authorization: Bearer YOUR_TOKEN" \
+      -H "Content-Type: application/json" \
+      -d '{"name": "Mascotas", "type": "expense", "color": "#FF6B6B"}'
+
+cuentas_categories_update:
+  description: Actualiza el nombre, tipo o color de una categoría personalizada del usuario.
+  endpoint: /cuentas/categories/{category_id}
+  method: PUT
+  authentication: jwt
+  parameters:
+    category_id: "ObjectId de la categoría (string)"
+  request_body:
+    name: "string (optional)"
+    type: "string (optional) — 'income' o 'expense'"
+    color: "string (optional)"
+  response_example:
+    status: 200
+    data:
+      _id: "507f1f77bcf86cd799439013"
+      name: "Mascotas y veterinaria"
+      type: "expense"
+      color: "#FF6B6B"
+  curl: |
+    curl -X PUT https://forja-api.onrender.com/cuentas/categories/507f1f77bcf86cd799439013 \
+      -H "Authorization: Bearer YOUR_TOKEN" \
+      -H "Content-Type: application/json" \
+      -d '{"name": "Mascotas y veterinaria"}'
+
+cuentas_categories_delete:
+  description: Elimina una categoría personalizada del usuario. No se pueden eliminar categorías predeterminadas.
+  endpoint: /cuentas/categories/{category_id}
+  method: DELETE
+  authentication: jwt
+  parameters:
+    category_id: "ObjectId de la categoría (string)"
+  response_example:
+    status: 200
+    data:
+      message: "Category deleted"
+  curl: |
+    curl -X DELETE https://forja-api.onrender.com/cuentas/categories/507f1f77bcf86cd799439013 \
+      -H "Authorization: Bearer YOUR_TOKEN"
+
+# ---- Presupuestos ------------------------------------------
+
+cuentas_budgets_get:
+  description: >
+    Obtiene los presupuestos mensuales del usuario para un mes específico.
+    Por defecto retorna el mes actual.
+  endpoint: /cuentas/budgets
+  method: GET
+  authentication: jwt
+  parameters:
+    year: "Año (integer, optional, default: año actual)"
+    month: "Mes (integer 1-12, optional, default: mes actual)"
+  response_example:
+    status: 200
+    data:
+      - _id: "507f1f77bcf86cd799439020"
+        user_id: "1234567890"
+        category_id: "507f1f77bcf86cd799439011"
+        category_name: "Alimentación"
+        year: 2026
+        month: 5
+        amount: 500000
+  curl: |
+    curl -X GET "https://forja-api.onrender.com/cuentas/budgets?year=2026&month=5" \
+      -H "Authorization: Bearer YOUR_TOKEN"
+
+cuentas_budgets_set:
+  description: >
+    Establece o actualiza el presupuesto mensual para una categoría (upsert).
+    Si ya existe un presupuesto para esa categoría/mes/año, lo sobrescribe.
+  endpoint: /cuentas/budgets
+  method: POST
+  authentication: jwt
+  request_body:
+    category_id: "string (required) — ObjectId de la categoría"
+    amount: "number (required) — Monto presupuestado en COP"
+    year: "integer (optional, default: año actual)"
+    month: "integer (optional, default: mes actual)"
+  response_example:
+    status: 200
+    data:
+      _id: "507f1f77bcf86cd799439020"
+      user_id: "1234567890"
+      category_id: "507f1f77bcf86cd799439011"
+      category_name: "Alimentación"
+      year: 2026
+      month: 5
+      amount: 500000
+  curl: |
+    curl -X POST https://forja-api.onrender.com/cuentas/budgets \
+      -H "Authorization: Bearer YOUR_TOKEN" \
+      -H "Content-Type: application/json" \
+      -d '{"category_id": "507f1f77bcf86cd799439011", "amount": 500000}'
+
+# ---- Transacciones -----------------------------------------
+
+cuentas_transactions_parse:
+  description: >
+    Analiza un texto libre en español colombiano y extrae el monto, tipo (ingreso/egreso)
+    y categoría sugerida. Devuelve una vista previa sin guardar en base de datos.
+    Si OPENAI_API_KEY está configurada, usa IA; de lo contrario usa el parser de reglas.
+  endpoint: /cuentas/transactions/parse
+  method: POST
+  authentication: jwt
+  request_body:
+    text: "string (required) — Texto libre, e.g. 'Me gasté 10 lucas en una salida a comer'"
+  response_example:
+    status: 200
+    data:
+      amount: 10000
+      type: "expense"
+      category_id: "507f1f77bcf86cd799439011"
+      category_name: "Alimentación"
+      description: "Me gasté 10 lucas en una salida a comer"
+  curl: |
+    curl -X POST https://forja-api.onrender.com/cuentas/transactions/parse \
+      -H "Authorization: Bearer YOUR_TOKEN" \
+      -H "Content-Type: application/json" \
+      -d '{"text": "Me gasté 10 lucas en una salida a comer"}'
+
+cuentas_transactions_create:
+  description: >
+    Guarda una transacción confirmada. Generalmente se llama después de revisar
+    el resultado de /transactions/parse y confirmarlo.
+  endpoint: /cuentas/transactions
+  method: POST
+  authentication: jwt
+  request_body:
+    amount: "number (required) — Monto en COP, debe ser positivo"
+    type: "string (required) — 'income' o 'expense'"
+    description: "string (required) — Descripción del movimiento"
+    category_id: "string (optional) — ObjectId de la categoría"
+    category_name: "string (optional) — Nombre de la categoría (se sobreescribe si category_id es válido)"
+    raw_text: "string (optional) — Texto original ingresado por el usuario"
+    date: "string (optional) — Fecha ISO 8601, default: ahora"
+  response_example:
+    status: 201
+    data:
+      _id: "507f1f77bcf86cd799439030"
+      user_id: "1234567890"
+      amount: 10000
+      type: "expense"
+      category_id: "507f1f77bcf86cd799439011"
+      category_name: "Alimentación"
+      description: "Salida a comer"
+      raw_text: "Me gasté 10 lucas en una salida a comer"
+      date: "2026-05-30T12:00:00Z"
+      created_at: "2026-05-30T12:00:00Z"
+  curl: |
+    curl -X POST https://forja-api.onrender.com/cuentas/transactions \
+      -H "Authorization: Bearer YOUR_TOKEN" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "amount": 10000,
+        "type": "expense",
+        "description": "Salida a comer",
+        "category_id": "507f1f77bcf86cd799439011",
+        "raw_text": "Me gasté 10 lucas en una salida a comer"
+      }'
+
+cuentas_transactions_list:
+  description: >
+    Lista las transacciones del usuario autenticado con paginación y filtros opcionales.
+    Ordenadas por fecha descendente.
+  endpoint: /cuentas/transactions
+  method: GET
+  authentication: jwt
+  parameters:
+    year: "integer (optional) — Filtrar por año"
+    month: "integer 1-12 (optional) — Filtrar por mes (requiere year)"
+    type: "string (optional) — 'income' o 'expense'"
+    category_id: "string (optional) — Filtrar por categoría"
+    page: "integer (optional, default: 1)"
+    page_size: "integer (optional, default: 50, max: 100)"
+  response_example:
+    status: 200
+    data:
+      page: 1
+      page_size: 50
+      total: 42
+      transactions:
+        - _id: "507f1f77bcf86cd799439030"
+          amount: 10000
+          type: "expense"
+          category_name: "Alimentación"
+          description: "Salida a comer"
+          date: "2026-05-30T12:00:00Z"
+  curl: |
+    curl -X GET "https://forja-api.onrender.com/cuentas/transactions?year=2026&month=5&type=expense" \
+      -H "Authorization: Bearer YOUR_TOKEN"
+
+cuentas_transactions_delete:
+  description: Elimina una transacción del usuario autenticado.
+  endpoint: /cuentas/transactions/{transaction_id}
+  method: DELETE
+  authentication: jwt
+  parameters:
+    transaction_id: "ObjectId de la transacción (string)"
+  response_example:
+    status: 200
+    data:
+      message: "Transaction deleted"
+  curl: |
+    curl -X DELETE https://forja-api.onrender.com/cuentas/transactions/507f1f77bcf86cd799439030 \
+      -H "Authorization: Bearer YOUR_TOKEN"
+
+# ---- Reportes ----------------------------------------------
+
+cuentas_reports_monthly:
+  description: >
+    Reporte mensual: totales de ingresos, egresos, balance y desglose por categoría.
+    Por defecto retorna el mes actual.
+  endpoint: /cuentas/reports/monthly
+  method: GET
+  authentication: jwt
+  parameters:
+    year: "integer (optional, default: año actual)"
+    month: "integer 1-12 (optional, default: mes actual)"
+  response_example:
+    status: 200
+    data:
+      year: 2026
+      month: 5
+      total_income: 3000000
+      total_expense: 1200000
+      balance: 1800000
+      breakdown:
+        - category: "Alimentación"
+          type: "expense"
+          total: 350000
+          count: 12
+        - category: "Salario"
+          type: "income"
+          total: 3000000
+          count: 1
+  curl: |
+    curl -X GET "https://forja-api.onrender.com/cuentas/reports/monthly?year=2026&month=5" \
+      -H "Authorization: Bearer YOUR_TOKEN"
+
+cuentas_reports_budget:
+  description: >
+    Ejecución presupuestal: compara el monto real ejecutado vs. el presupuestado
+    para cada categoría en el mes indicado.
+  endpoint: /cuentas/reports/budget
+  method: GET
+  authentication: jwt
+  parameters:
+    year: "integer (optional, default: año actual)"
+    month: "integer 1-12 (optional, default: mes actual)"
+  response_example:
+    status: 200
+    data:
+      year: 2026
+      month: 5
+      execution:
+        - category_id: "507f1f77bcf86cd799439011"
+          category_name: "Alimentación"
+          budgeted: 500000
+          actual: 350000
+          remaining: 150000
+          percentage: 70.0
+  curl: |
+    curl -X GET "https://forja-api.onrender.com/cuentas/reports/budget?year=2026&month=5" \
+      -H "Authorization: Bearer YOUR_TOKEN"
+
+cuentas_reports_projection:
+  description: >
+    Proyección a fin de mes: estima ingresos y egresos totales al final del mes
+    basándose en el promedio diario acumulado hasta hoy.
+  endpoint: /cuentas/reports/projection
+  method: GET
+  authentication: jwt
+  parameters:
+    year: "integer (optional, default: año actual)"
+    month: "integer 1-12 (optional, default: mes actual)"
+  response_example:
+    status: 200
+    data:
+      year: 2026
+      month: 5
+      days_elapsed: 15
+      days_in_month: 31
+      actual_income: 1500000
+      actual_expense: 600000
+      projected_income: 3100000
+      projected_expense: 1240000
+      projected_balance: 1860000
+  curl: |
+    curl -X GET "https://forja-api.onrender.com/cuentas/reports/projection?year=2026&month=5" \
+      -H "Authorization: Bearer YOUR_TOKEN"

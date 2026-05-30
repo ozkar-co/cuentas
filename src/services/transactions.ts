@@ -1,112 +1,93 @@
-import {
-  collection,
-  addDoc,
-  query,
-  where,
-  getDocs,
-  Timestamp,
-  orderBy,
-  deleteDoc,
-  doc,
-  updateDoc
-} from 'firebase/firestore';
-import { db } from './firebase';
-import { User } from 'firebase/auth';
+import { api } from './api';
 
 export interface Transaction {
-  id?: string;
-  userId: string;
-  type: 'expense' | 'income';
+  id: string;
   amount: number;
-  category: string;
+  type: 'income' | 'expense';
+  category_id?: string;
+  category_name?: string;
   description: string;
+  raw_text?: string;
   date: Date;
-  timestamp: Date;
 }
 
-export const addTransaction = async (transaction: Omit<Transaction, 'id'>) => {
-  try {
-    const docRef = await addDoc(collection(db, 'transactions'), {
-      ...transaction,
-      date: Timestamp.fromDate(transaction.date),
-      timestamp: Timestamp.fromDate(transaction.timestamp)
-    });
-    return docRef.id;
-  } catch (error) {
-    console.error('Error al añadir transacción:', error);
-    throw error;
-  }
+export interface ParsedTransaction {
+  amount: number;
+  type: 'income' | 'expense';
+  category_id?: string;
+  category_name?: string;
+  description: string;
+}
+
+interface ApiTransaction {
+  _id: string;
+  amount: number;
+  type: 'income' | 'expense';
+  category_id?: string;
+  category_name?: string;
+  description: string;
+  raw_text?: string;
+  date: string;
+}
+
+const mapTransaction = (t: ApiTransaction): Transaction => ({
+  id: t._id,
+  amount: t.amount,
+  type: t.type,
+  category_id: t.category_id,
+  category_name: t.category_name,
+  description: t.description,
+  raw_text: t.raw_text,
+  date: new Date(t.date),
+});
+
+export const parseTransaction = async (text: string): Promise<ParsedTransaction> => {
+  return api.post<ParsedTransaction>('/cuentas/transactions/parse', { text });
 };
 
-export const updateTransaction = async (transactionId: string, updates: Partial<Transaction>) => {
-  try {
-    const transactionRef = doc(db, 'transactions', transactionId);
-    const updatedData = {
-      ...updates,
-      date: updates.date ? Timestamp.fromDate(updates.date) : undefined,
-      timestamp: new Date()
-    };
-    await updateDoc(transactionRef, updatedData);
-  } catch (error) {
-    console.error('Error al actualizar transacción:', error);
-    throw error;
-  }
+export const addTransaction = async (
+  transaction: Omit<Transaction, 'id' | 'date'> & { date?: Date; raw_text?: string }
+): Promise<Transaction> => {
+  const body = {
+    amount: transaction.amount,
+    type: transaction.type,
+    description: transaction.description,
+    category_id: transaction.category_id,
+    category_name: transaction.category_name,
+    raw_text: transaction.raw_text,
+    date: transaction.date ? transaction.date.toISOString() : undefined,
+  };
+  const data = await api.post<ApiTransaction>('/cuentas/transactions', body);
+  return mapTransaction(data);
 };
 
-export const deleteTransaction = async (transactionId: string) => {
-  try {
-    await deleteDoc(doc(db, 'transactions', transactionId));
-  } catch (error) {
-    console.error('Error al eliminar transacción:', error);
-    throw error;
-  }
+export const deleteTransaction = async (transactionId: string): Promise<void> => {
+  await api.delete(`/cuentas/transactions/${transactionId}`);
 };
 
-export const getTransactionsByMonth = async (user: User, month: Date) => {
-  const startOfMonth = new Date(month.getFullYear(), month.getMonth(), 1);
-  const endOfMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0, 23, 59, 59);
+export const getTransactionsByMonth = async (year: number, month: number): Promise<Transaction[]> => {
+  const data = await api.get<{ transactions: ApiTransaction[] }>(
+    `/cuentas/transactions?year=${year}&month=${month}&page_size=100`
+  );
+  return data.transactions.map(mapTransaction);
+};
 
-  try {
-    const q = query(
-      collection(db, 'transactions'),
-      where('userId', '==', user.uid),
-      where('date', '>=', Timestamp.fromDate(startOfMonth)),
-      where('date', '<=', Timestamp.fromDate(endOfMonth)),
-      orderBy('date', 'desc')
+export const getTransactionsByMonthRange = async (
+  startYear: number,
+  startMonth: number,
+  endYear: number,
+  endMonth: number
+): Promise<Transaction[]> => {
+  const results: Transaction[] = [];
+  let year = startYear;
+  let month = startMonth;
+  while (year < endYear || (year === endYear && month <= endMonth)) {
+    const data = await api.get<{ transactions: ApiTransaction[] }>(
+      `/cuentas/transactions?year=${year}&month=${month}&page_size=100`
     );
-
-    const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-      date: doc.data().date.toDate(),
-      timestamp: doc.data().timestamp.toDate()
-    })) as Transaction[];
-  } catch (error) {
-    console.error('Error al obtener transacciones:', error);
-    throw error;
+    results.push(...data.transactions.map(mapTransaction));
+    month++;
+    if (month > 12) { month = 1; year++; }
   }
+  return results;
 };
-
-export const getTransactionsByDateRange = async (user: User, startDate: Date, endDate: Date) => {
-  try {
-    const q = query(
-      collection(db, 'transactions'),
-      where('userId', '==', user.uid),
-      where('date', '>=', Timestamp.fromDate(startDate)),
-      where('date', '<=', Timestamp.fromDate(endDate)),
-      orderBy('date', 'desc')
-    );
-
-    const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-      date: doc.data().date.toDate(),
-      timestamp: doc.data().timestamp.toDate()
-    })) as Transaction[];
-  } catch (error) {
-    console.error('Error al obtener transacciones:', error);
-    throw error;
-  }
-}; 

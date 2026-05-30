@@ -25,7 +25,7 @@ import {
 } from 'recharts';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth } from '../services/auth';
-import { getTransactionsByDateRange } from '../services/transactions';
+import { getTransactionsByMonthRange } from '../services/transactions';
 import { getCategories } from '../services/categories';
 import { format, subMonths, startOfMonth} from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -48,7 +48,7 @@ const Analytics: React.FC = () => {
     const loadCategories = async () => {
       if (user) {
         try {
-          const userCategories = await getCategories(user);
+          const userCategories = await getCategories();
           setCategories(userCategories);
         } catch (error) {
           console.error('Error al cargar categorías:', error);
@@ -64,7 +64,11 @@ const Analytics: React.FC = () => {
         try {
           const endDate = new Date();
           const startDate = subMonths(startOfMonth(endDate), timeRange - 1);
-          const transactions = await getTransactionsByDateRange(user, startDate, endDate);
+          const startYear = startDate.getFullYear();
+          const startMonth = startDate.getMonth() + 1;
+          const endYear = endDate.getFullYear();
+          const endMonth = endDate.getMonth() + 1;
+          const transactions = await getTransactionsByMonthRange(startYear, startMonth, endYear, endMonth);
 
           // Procesar datos mensuales
           const monthlyStats = new Map();
@@ -74,7 +78,7 @@ const Analytics: React.FC = () => {
           transactions.forEach(transaction => {
             const monthKey = format(transaction.date, 'yyyy-MM');
             const dayKey = format(transaction.date, 'dd');
-            const amount = Math.abs(transaction.amount);
+            const amount = transaction.amount;
 
             // Estadísticas mensuales
             if (!monthlyStats.has(monthKey)) {
@@ -85,29 +89,30 @@ const Analytics: React.FC = () => {
               });
             }
             const stats = monthlyStats.get(monthKey);
-            if (transaction.amount > 0) {
+            if (transaction.type === 'income') {
               stats.income += amount;
             } else {
               stats.expenses += amount;
             }
 
             // Tendencias por categoría
-            if (!categoryTrends.has(transaction.category)) {
-              categoryTrends.set(transaction.category, {
+            const categoryKey = transaction.category_id || transaction.category_name || 'Sin categoría';
+            if (!categoryTrends.has(categoryKey)) {
+              categoryTrends.set(categoryKey, {
                 values: new Array(timeRange).fill(0),
-                type: transaction.amount > 0 ? 'income' : 'expense'
+                type: transaction.type
               });
             }
             const monthIndex = timeRange - 1 - Math.floor((endDate.getTime() - transaction.date.getTime()) / (30 * 24 * 60 * 60 * 1000));
             if (monthIndex >= 0) {
-              categoryTrends.get(transaction.category).values[monthIndex] += amount;
+              categoryTrends.get(categoryKey).values[monthIndex] += amount;
             }
 
             // Estadísticas diarias
             if (!dailyStats.has(dayKey)) {
               dailyStats.set(dayKey, { income: 0, expenses: 0 });
             }
-            if (transaction.amount > 0) {
+            if (transaction.type === 'income') {
               dailyStats.get(dayKey).income += amount;
             } else {
               dailyStats.get(dayKey).expenses += amount;
@@ -119,7 +124,7 @@ const Analytics: React.FC = () => {
           // Calcular tendencias y predicciones
           const trends: any = {};
           const predictions: any = {};
-          categoryTrends.forEach((data, categoryId) => {
+          categoryTrends.forEach((data, categoryKey) => {
             const values = data.values.filter((v: number) => v > 0);
             if (values.length > 1) {
               const trend = (values[values.length - 1] - values[0]) / values[0] * 100;
@@ -128,11 +133,10 @@ const Analytics: React.FC = () => {
                 return acc + (val - values[i - 1]);
               }, 0) / (values.length - 1);
               
-              const category = categories.find(c => c.id === categoryId);
-              if (category) {
-                trends[category.name] = trend;
-                predictions[category.name] = values[values.length - 1] + avgChange;
-              }
+              const category = categories.find(c => c.id === categoryKey || c.name === categoryKey);
+              const label = category?.name || categoryKey;
+              trends[label] = trend;
+              predictions[label] = values[values.length - 1] + avgChange;
             }
           });
           setTrends(trends);
@@ -151,10 +155,12 @@ const Analytics: React.FC = () => {
           const expenseStats = new Map();
           
           transactions.forEach(transaction => {
-            const categoryName = categories.find(cat => cat.id === transaction.category)?.name || transaction.category;
-            const amount = Math.abs(transaction.amount);
+            const categoryName = transaction.category_name ||
+              categories.find(cat => cat.id === transaction.category_id)?.name ||
+              'Sin categoría';
+            const amount = transaction.amount;
             
-            if (transaction.amount > 0) {
+            if (transaction.type === 'income') {
               if (!incomeStats.has(categoryName)) {
                 incomeStats.set(categoryName, 0);
               }
