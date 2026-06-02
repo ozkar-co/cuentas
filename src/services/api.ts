@@ -37,7 +37,8 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   }
 
   const json = await response.json();
-  return json.data as T;
+  const payload = (json !== null && typeof json === 'object' && 'data' in json) ? json.data : json;
+  return payload as T;
 }
 
 export const api = {
